@@ -1,0 +1,15 @@
+[Unit]
+Description=Polymarket Telegram Bot Controller
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/polymarket-bot
+ExecStart=/root/polymarket-bot/venv/bin/python telegram_bot.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/polymarket-bot/telegram_bot.log
+StandardError=append:/root/polymarket-bot/telegram_bot.log
+
+[Install]
+WantedBy=multi-user.target

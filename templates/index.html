@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELEVENONED</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      color: #00ff41;
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      padding: 8px;
+    }
+
+    /* ── GLOBAL HEADER ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #00ff41;
+      padding: 6px 12px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .header .title {
+      font-size: clamp(1rem, 4vw, 1.4rem);
+      font-weight: bold;
+      letter-spacing: 3px;
+      color: #00ff41;
+    }
+    .header .time-info {
+      color: #ffff00;
+      font-size: clamp(0.7rem, 2.5vw, 0.85rem);
+      text-align: right;
+    }
+
+    /* ── DUAL PANEL ── */
+    .dual-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 900px) {
+      .dual-panel { grid-template-columns: 1fr; }
+    }
+
+    /* ── PANEL ── */
+    .panel { display: flex; flex-direction: column; gap: 8px; }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #00ff41;
+      padding: 5px 10px;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .panel-title {
+      font-size: 0.9rem;
+      letter-spacing: 3px;
+      font-weight: bold;
+    }
+    .panel-paper .panel-title { color: #00ffff; }
+    .panel-real  .panel-title { color: #ffff00; }
+
+    .panel-meta {
+      font-size: 0.7rem;
+      color: #888;
+      text-align: right;
+    }
+    .panel-meta span { color: #00ff41; }
+
+    /* ── STAT CARDS ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    @media (max-width: 500px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat-card {
+      border: 1px solid #00ff41;
+      padding: 8px;
+      text-align: center;
+    }
+    .stat-card .label {
+      color: #888;
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    .stat-card .value {
+      font-size: clamp(1.1rem, 3vw, 1.6rem);
+      font-weight: bold;
+    }
+    .stat-card .sub {
+      font-size: 0.65rem;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    /* Real panel punya 5 stat cards */
+    .stat-grid-5 { grid-template-columns: repeat(5, 1fr); }
+    @media (max-width: 700px) {
+      .stat-grid-5 { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 400px) {
+      .stat-grid-5 { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .c-green  { color: #00ff41; }
+    .c-yellow { color: #ffff00; }
+    .c-red    { color: #ff4444; }
+    .c-cyan   { color: #00ffff; }
+    .c-orange { color: #ff8800; }
+
+    /* ── LIVE BOX ── */
+    .live-box {
+      border: 1px solid #00ff41;
+      padding: 10px 12px;
+    }
+    .live-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .live-label {
+      color: #ff4444;
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .market-info { color: #888; font-size: 0.75rem; }
+
+    .price-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .price-card {
+      border: 1px solid #333;
+      padding: 8px;
+      text-align: center;
+    }
+    .price-card .p-label {
+      color: #888;
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    .price-card .p-value {
+      font-size: clamp(1.2rem, 4vw, 1.8rem);
+      font-weight: bold;
+    }
+    .yes-val { color: #00ff41; }
+    .no-val  { color: #ff4444; }
+
+    .progress-wrap { margin-bottom: 8px; }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      color: #555;
+      font-size: 0.65rem;
+      margin-bottom: 3px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: #111;
+      border: 1px solid #333;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #00ff41;
+      transition: width 0.5s linear;
+    }
+    .progress-fill-real { background: #ffff00; }
+
+    .status-line {
+      color: #ffff00;
+      font-size: clamp(0.65rem, 2vw, 0.78rem);
+      text-align: center;
+      padding: 4px;
+      border: 1px solid #333;
+    }
+
+    /* ── BOTTOM GRID ── */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    @media (max-width: 600px) {
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── BOX ── */
+    .box {
+      border: 1px solid #00ff41;
+      padding: 8px;
+      overflow-x: auto;
+    }
+    .box-title {
+      color: #ffff00;
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 4px;
+    }
+    .box-full {
+      border: 1px solid #00ff41;
+      padding: 8px;
+      overflow-x: auto;
+    }
+
+    /* ── TABLE ── */
+    table { width: 100%; border-collapse: collapse; font-size: clamp(0.6rem, 1.8vw, 0.75rem); }
+    thead th {
+      color: #555;
+      text-align: left;
+      padding: 2px 6px 6px;
+      font-size: 0.6rem;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+    tbody tr { border-top: 1px solid #111; }
+    tbody tr:hover { background: #0a1a0a; }
+    tbody td { padding: 4px 6px; color: #00ff41; white-space: nowrap; }
+    .td-win     { color: #00ff41; font-weight: bold; }
+    .td-lose    { color: #ff4444; font-weight: bold; }
+    .td-pending { color: #ffff00; }
+    .td-entry   { color: #00ffff; }
+    .td-wr      { color: #ffff00; }
+    .td-dim     { color: #555; }
+    .td-pnl-pos { color: #00ff41; }
+    .td-pnl-neg { color: #ff4444; }
+
+    /* ── FOOTER ── */
+    .footer {
+      text-align: center;
+      color: #333;
+      font-size: 0.6rem;
+      letter-spacing: 2px;
+      padding-top: 6px;
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      width: 1px;
+      background: #1a1a1a;
+    }
+    @media (max-width: 900px) {
+      .divider { display: none; }
+    }
+
+    /* ── PAPER = BLUE, REAL = WHITE ── */
+    .panel-paper .panel-header,
+    .panel-paper .stat-card,
+    .panel-paper .live-box,
+    .panel-paper .box,
+    .panel-paper .box-full { border-color: #2277ff; }
+    .panel-paper .progress-fill { background: #2277ff; }
+
+    .panel-real .panel-header,
+    .panel-real .stat-card,
+    .panel-real .live-box,
+    .panel-real .box,
+    .panel-real .box-full { border-color: #ffffff; }
+    .panel-real .progress-fill { background: #ffffff; }
+  </style>
+</head>
+<body>
+
+  <!-- GLOBAL HEADER -->
+  <div class="header">
+    <div class="title">ELEVENONED</div>
+    <div class="time-info">
+      <span id="clock">--:--:--</span> &nbsp;|&nbsp; <span id="date-label">----</span><br>
+      START: <span id="paper-start">-</span> &nbsp;|&nbsp; UP: <span id="paper-running">-</span>
+    </div>
+  </div>
+
+  <!-- DUAL PANEL -->
+  <div class="dual-panel">
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- PANEL KIRI: PAPER                        -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="panel panel-paper">
+
+      <div class="panel-header">
+        <div class="panel-title">◈ PAPER</div>
+        <div class="panel-meta">Shares: <span id="p-shares">10</span></div>
+      </div>
+
+      <!-- STAT CARDS -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="label">MARKET</div>
+          <div class="value c-cyan" id="p-market-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">ENTRY</div>
+          <div class="value c-yellow" id="p-total-entry">0</div>
+          <div class="sub" id="p-entry-of">/ 0 MKT</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">WIN</div>
+          <div class="value c-green" id="p-total-win">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">LOSE</div>
+          <div class="value c-red" id="p-total-lose">0</div>
+          <div class="sub td-wr" id="p-winrate">WR 0%</div>
+        </div>
+      </div>
+
+      <!-- LIVE PRICE -->
+      <div class="live-box">
+        <div class="live-header">
+          <div class="live-label">● LIVE</div>
+          <div class="market-info">
+            MKT #<span id="p-live-market-num">-</span>
+            &nbsp;|&nbsp;
+            <span id="p-live-elapsed">0</span>/300s
+          </div>
+        </div>
+        <div class="price-row">
+          <div class="price-card">
+            <div class="p-label">YES / UP</div>
+            <div class="p-value yes-val" id="p-yes-price">--.--</div>
+          </div>
+          <div class="price-card">
+            <div class="p-label">NO / DOWN</div>
+            <div class="p-value no-val" id="p-no-price">--.--</div>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-label">
+            <span>0s</span><span>W1: 30-80</span><span>300s</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="p-progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="status-line" id="p-status-badge">Menunggu market...</div>
+      </div>
+
+      <!-- BREAKDOWN + DAILY -->
+      <div class="bottom-grid">
+        <div class="box">
+          <div class="box-title">BREAKDOWN 4 JAM</div>
+          <table>
+            <thead>
+              <tr><th>JAM</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th></tr>
+            </thead>
+            <tbody id="p-breakdown-body">
+              <tr><td colspan="6" class="td-dim">NO DATA</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="box">
+          <div class="box-title">DAILY RESULTS</div>
+          <table>
+            <thead>
+              <tr><th>DATE</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th></tr>
+            </thead>
+            <tbody id="p-daily-body">
+              <tr><td colspan="6" class="td-dim">NO DATA</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TRADE HISTORY -->
+      <div class="box-full">
+        <div class="box-title">TRADE HISTORY (10 TERAKHIR)</div>
+        <table>
+          <thead>
+            <tr><th>TIME</th><th>SIDE</th><th>PRICE</th><th>RESULT</th></tr>
+          </thead>
+          <tbody id="p-history-body">
+            <tr><td colspan="4" class="td-dim">NO TRADES YET</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /panel paper -->
+
+    <!-- ════════════════════════════════════════ -->
+    <!-- PANEL KANAN: REAL                        -->
+    <!-- ════════════════════════════════════════ -->
+    <div class="panel panel-real">
+
+      <div class="panel-header">
+        <div class="panel-title">◈ REAL</div>
+        <div class="panel-meta">
+          BAL: <span id="r-balance" class="c-green">-</span> USDC
+          &nbsp;|&nbsp;
+          Base: <span id="r-base" class="c-yellow">-</span>
+          &nbsp;|&nbsp;
+          Max: <span id="r-max-streak" class="c-red">-</span>x
+        </div>
+      </div>
+
+      <!-- STAT CARDS (4: balance, streak, base, pnl) -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="label">BALANCE</div>
+          <div class="value c-green" id="r-balance-card">$-</div>
+          <div class="sub">USDC</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">LOSESTREAK</div>
+          <div class="value c-red" id="r-streak-card">0/-</div>
+          <div class="sub">CURRENT/MAX</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">BASE</div>
+          <div class="value c-yellow" id="r-base-card">$-</div>
+          <div class="sub">ENTRY</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">PNL</div>
+          <div class="value" id="r-total-pnl">$0.00</div>
+          <div class="sub td-wr" id="r-winloss-sub">W:0 L:0</div>
+        </div>
+      </div>
+
+      <!-- LIVE PRICE -->
+      <div class="live-box">
+        <div class="live-header">
+          <div class="live-label">● LIVE</div>
+          <div class="market-info">
+            MKT #<span id="r-live-market-num">-</span>
+            &nbsp;|&nbsp;
+            <span id="r-live-elapsed">0</span>/300s
+            &nbsp;|&nbsp;
+            Next: $<span id="r-next-bet">-</span>
+          </div>
+        </div>
+        <div class="price-row">
+          <div class="price-card">
+            <div class="p-label">YES / UP</div>
+            <div class="p-value yes-val" id="r-yes-price">--.--</div>
+          </div>
+          <div class="price-card">
+            <div class="p-label">NO / DOWN</div>
+            <div class="p-value no-val" id="r-no-price">--.--</div>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-label">
+            <span>0s</span><span>W1: 30-80</span><span>300s</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill progress-fill-real" id="r-progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="status-line" id="r-status-badge">Menunggu bot start...</div>
+      </div>
+
+      <!-- BREAKDOWN + DAILY (dengan PNL) -->
+      <div class="bottom-grid">
+        <div class="box">
+          <div class="box-title">BREAKDOWN 4 JAM</div>
+          <table>
+            <thead>
+              <tr><th>JAM</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th><th>PNL</th></tr>
+            </thead>
+            <tbody id="r-breakdown-body">
+              <tr><td colspan="7" class="td-dim">NO DATA</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="box">
+          <div class="box-title">DAILY RESULTS</div>
+          <table>
+            <thead>
+              <tr><th>DATE</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th><th>PNL</th></tr>
+            </thead>
+            <tbody id="r-daily-body">
+              <tr><td colspan="7" class="td-dim">NO DATA</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TRADE HISTORY (dengan amount & PNL) -->
+      <div class="box-full">
+        <div class="box-title">TRADE HISTORY (10 TERAKHIR)</div>
+        <table>
+          <thead>
+            <tr><th>TIME</th><th>SIDE</th><th>PRICE</th><th>AMOUNT</th><th>RESULT</th><th>PNL</th></tr>
+          </thead>
+          <tbody id="r-history-body">
+            <tr><td colspan="6" class="td-dim">NO TRADES YET</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /panel real -->
+
+  </div><!-- /dual-panel -->
+
+  <div class="footer">ELEVENONED &mdash; UPDATE EVERY 1s</div>
+
+<script>
+  // ── CLOCK ──────────────────────────────────────────
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toTimeString().slice(0,8);
+    document.getElementById('date-label').textContent = now.toISOString().slice(0,10);
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ── PAPER UPDATE ───────────────────────────────────
+  function updatePaper(d) {
+    if (!d || Object.keys(d).length === 0) return;
+
+    document.getElementById('paper-start').textContent   = d.start_time || '-';
+    document.getElementById('paper-running').textContent = d.running    || '-';
+    document.getElementById('p-market-count').textContent = d.market_count || 0;
+    document.getElementById('p-total-entry').textContent  = d.total_entry  || 0;
+    document.getElementById('p-entry-of').textContent     = `/ ${d.market_count || 0} MKT`;
+    document.getElementById('p-total-win').textContent    = d.total_win   || 0;
+    document.getElementById('p-total-lose').textContent   = d.total_lose  || 0;
+    document.getElementById('p-winrate').textContent      = `WR ${d.winrate || 0}%`;
+
+    const live = d.live || {};
+    document.getElementById('p-live-market-num').textContent = live.market_num || '-';
+    document.getElementById('p-live-elapsed').textContent    = live.market_elapsed || 0;
+    if (live.yes_price != null) {
+      document.getElementById('p-yes-price').textContent = live.yes_price.toFixed(1) + '¢';
+      document.getElementById('p-no-price').textContent  = live.no_price.toFixed(1) + '¢';
+    }
+    const pct = Math.min(((live.market_elapsed || 0) / 300) * 100, 100);
+    document.getElementById('p-progress-fill').style.width = pct + '%';
+    document.getElementById('p-status-badge').textContent   = live.status || '-';
+
+    // Breakdown
+    const tbody = document.getElementById('p-breakdown-body');
+    tbody.innerHTML = (!d.breakdown || d.breakdown.length === 0)
+      ? `<tr><td colspan="6" class="td-dim">NO DATA</td></tr>`
+      : d.breakdown.map(r => `
+          <tr>
+            <td class="td-dim">${r.label}</td>
+            <td class="td-entry">${r.entry}/48</td>
+            <td class="td-win">${r.win}</td>
+            <td class="td-lose">${r.lose}</td>
+            <td class="td-wr">${r.entry > 0 ? r.winrate+'%' : '-'}</td>
+            <td class="td-lose">${r.max_streak > 0 ? r.max_streak+'x' : '-'}</td>
+          </tr>`).join('');
+
+    // Daily
+    const dbody = document.getElementById('p-daily-body');
+    dbody.innerHTML = (!d.daily || d.daily.length === 0)
+      ? `<tr><td colspan="6" class="td-dim">NO DATA</td></tr>`
+      : d.daily.map(r => `
+          <tr>
+            <td class="td-dim">${r.date}</td>
+            <td class="td-entry">${r.entry}/288</td>
+            <td class="td-win">${r.win}</td>
+            <td class="td-lose">${r.lose}</td>
+            <td class="td-wr">${r.entry > 0 ? r.winrate+'%' : '-'}</td>
+            <td class="td-lose">${r.max_streak > 0 ? r.max_streak+'x' : '-'}</td>
+          </tr>`).join('');
+
+    // History
+    const hbody = document.getElementById('p-history-body');
+    hbody.innerHTML = (!d.trades || d.trades.length === 0)
+      ? `<tr><td colspan="4" class="td-dim">NO TRADES YET</td></tr>`
+      : d.trades.map(t => {
+          const rc = t.result==='WIN' ? 'td-win' : t.result==='LOSE' ? 'td-lose' : 'td-pending';
+          const ri = t.result==='WIN' ? '▲ WIN'  : t.result==='LOSE' ? '▼ LOSE' : '~ PENDING';
+          const sc = t.side==='YES' ? 'yes-val' : 'no-val';
+          return `<tr>
+            <td class="td-dim">${t.time}</td>
+            <td class="${sc}">${t.side}</td>
+            <td class="td-dim">${t.price > 0 ? t.price.toFixed(1)+'¢' : '-'}</td>
+            <td class="${rc}">${ri}</td>
+          </tr>`;
+        }).join('');
+  }
+
+  // ── REAL UPDATE ────────────────────────────────────
+  function pnlClass(v) { return v >= 0 ? 'td-pnl-pos' : 'td-pnl-neg'; }
+  function pnlStr(v)   { return (v >= 0 ? '+' : '') + '$' + v.toFixed(2); }
+
+  function updateReal(d) {
+    if (!d || Object.keys(d).length === 0) return;
+
+    const live = d.live || {};
+
+    // Panel header
+    const bal = live.balance != null ? live.balance.toFixed(2) : '-';
+    document.getElementById('r-balance').textContent    = bal;
+    document.getElementById('r-base').textContent       = d.base_amount != null ? '$'+d.base_amount : '-';
+    document.getElementById('r-max-streak').textContent = d.max_streak || '-';
+
+    // Stat cards baru
+    document.getElementById('r-balance-card').textContent = live.balance != null ? '$'+live.balance.toFixed(2) : '$-';
+    document.getElementById('r-streak-card').textContent  = `${live.current_streak || 0}/${d.max_streak || '-'}`;
+    document.getElementById('r-base-card').textContent    = d.base_amount != null ? '$'+d.base_amount : '$-';
+
+    const pnl = d.total_pnl || 0;
+    const pnlEl = document.getElementById('r-total-pnl');
+    pnlEl.textContent  = pnlStr(pnl);
+    pnlEl.className    = 'value ' + pnlClass(pnl);
+    document.getElementById('r-winloss-sub').textContent = `W:${d.total_win||0} L:${d.total_lose||0}`;
+
+    // Live
+    document.getElementById('r-live-market-num').textContent = live.market_num || '-';
+    document.getElementById('r-live-elapsed').textContent    = live.market_elapsed || 0;
+    document.getElementById('r-next-bet').textContent        = live.next_bet != null ? live.next_bet.toFixed(2) : '-';
+    if (live.yes_price != null) {
+      document.getElementById('r-yes-price').textContent = live.yes_price.toFixed(1) + '¢';
+      document.getElementById('r-no-price').textContent  = live.no_price.toFixed(1) + '¢';
+    }
+    const pct = Math.min(((live.market_elapsed || 0) / 300) * 100, 100);
+    document.getElementById('r-progress-fill').style.width = pct + '%';
+    document.getElementById('r-status-badge').textContent   = live.status || '-';
+
+    // Breakdown
+    const tbody = document.getElementById('r-breakdown-body');
+    tbody.innerHTML = (!d.breakdown || d.breakdown.length === 0)
+      ? `<tr><td colspan="7" class="td-dim">NO DATA</td></tr>`
+      : d.breakdown.map(r => `
+          <tr>
+            <td class="td-dim">${r.label}</td>
+            <td class="td-entry">${r.entry}/48</td>
+            <td class="td-win">${r.win}</td>
+            <td class="td-lose">${r.lose}</td>
+            <td class="td-wr">${r.entry > 0 ? r.winrate+'%' : '-'}</td>
+            <td class="td-lose">${r.max_streak > 0 ? r.max_streak+'x' : '-'}</td>
+            <td class="${pnlClass(r.pnl || 0)}">${r.pnl != null ? pnlStr(r.pnl) : '-'}</td>
+          </tr>`).join('');
+
+    // Daily
+    const dbody = document.getElementById('r-daily-body');
+    dbody.innerHTML = (!d.daily || d.daily.length === 0)
+      ? `<tr><td colspan="7" class="td-dim">NO DATA</td></tr>`
+      : d.daily.map(r => `
+          <tr>
+            <td class="td-dim">${r.date}</td>
+            <td class="td-entry">${r.entry}/288</td>
+            <td class="td-win">${r.win}</td>
+            <td class="td-lose">${r.lose}</td>
+            <td class="td-wr">${r.entry > 0 ? r.winrate+'%' : '-'}</td>
+            <td class="td-lose">${r.max_streak > 0 ? r.max_streak+'x' : '-'}</td>
+            <td class="${pnlClass(r.pnl || 0)}">${r.pnl != null ? pnlStr(r.pnl) : '-'}</td>
+          </tr>`).join('');
+
+    // History
+    const hbody = document.getElementById('r-history-body');
+    hbody.innerHTML = (!d.trades || d.trades.length === 0)
+      ? `<tr><td colspan="6" class="td-dim">NO TRADES YET</td></tr>`
+      : d.trades.map(t => {
+          const rc = t.result==='WIN' ? 'td-win' : t.result==='LOSE' ? 'td-lose' : 'td-pending';
+          const ri = t.result==='WIN' ? '▲ WIN'  : t.result==='LOSE' ? '▼ LOSE' : '~ PENDING';
+          const sc = t.side==='YES' ? 'yes-val' : 'no-val';
+          const pc = t.pnl != null ? pnlClass(t.pnl) : 'td-dim';
+          const ps = t.pnl != null ? pnlStr(t.pnl) : '-';
+          return `<tr>
+            <td class="td-dim">${t.time}</td>
+            <td class="${sc}">${t.side}</td>
+            <td class="td-dim">${t.price > 0 ? t.price.toFixed(1)+'¢' : '-'}</td>
+            <td class="td-dim">${t.amount > 0 ? '$'+t.amount.toFixed(2) : '-'}</td>
+            <td class="${rc}">${ri}</td>
+            <td class="${pc}">${ps}</td>
+          </tr>`;
+        }).join('');
+  }
+
+  // ── FETCH LOOP ─────────────────────────────────────
+  let _lastPaper = null, _lastReal = null;
+
+  async function fetchAll() {
+    try {
+      const [rp, rr] = await Promise.all([
+        fetch('/api/paper').then(r => r.json()),
+        fetch('/api/real').then(r => r.json()),
+      ]);
+      const ps = JSON.stringify(rp), rs = JSON.stringify(rr);
+      if (ps !== _lastPaper) { _lastPaper = ps; updatePaper(rp); }
+      if (rs !== _lastReal)  { _lastReal  = rs; updateReal(rr);  }
+    } catch(e) {}
+  }
+
+  fetchAll();
+  setInterval(fetchAll, 1000);
+</script>
+</body>
+</html>
