@@ -15,9 +15,9 @@ import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from loguru import logger
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
+    Application, CommandHandler, MessageHandler, CallbackQueryHandler,
     filters, ContextTypes, ConversationHandler
 )
 
@@ -35,8 +35,8 @@ logger.add(
 )
 
 # Conversation states
-ASK_BASE, ASK_STREAK = range(2)
-CONFIRM_RESET = 2
+ASK_BASE, ASK_RANGE, ASK_MODE, ASK_MARTINGALE_START, ASK_STREAK = range(5)
+CONFIRM_RESET = 5
 
 # Real bot process
 real_bot_process = None
@@ -95,11 +95,84 @@ async def ask_base(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if amount <= 0:
             raise ValueError
         context.user_data['base_amount'] = amount
-        await update.message.reply_text(f"✅ Base: ${amount}\n\n🔢 Masukkan max losestreak:")
-        return ASK_STREAK
     except:
         await update.message.reply_text("❌ Input tidak valid. Masukkan angka, contoh: 3")
         return ASK_BASE
+
+    keyboard = [[
+        InlineKeyboardButton("53-58¢", callback_data="range_53_58"),
+        InlineKeyboardButton("42-47¢", callback_data="range_42_47"),
+    ]]
+    await update.message.reply_text(
+        f"✅ Base: <b>${amount}</b>\n\n📊 Pilih price range:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+    return ASK_RANGE
+
+async def ask_range(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "range_53_58":
+        context.user_data['w1_min'] = 53
+        context.user_data['w1_max'] = 58
+        range_label = "53-58¢"
+    else:
+        context.user_data['w1_min'] = 42
+        context.user_data['w1_max'] = 47
+        range_label = "42-47¢"
+    context.user_data['range_label'] = range_label
+
+    keyboard = [[
+        InlineKeyboardButton("Martingale Recovery", callback_data="mode_martingale"),
+        InlineKeyboardButton("Flat", callback_data="mode_flat"),
+    ]]
+    await query.edit_message_text(
+        f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{range_label}</b>\n\n🎯 Pilih mode betting:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+    return ASK_MODE
+
+async def ask_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    mode = "martingale" if query.data == "mode_martingale" else "flat"
+    context.user_data['betting_mode'] = mode
+
+    if mode == "flat":
+        context.user_data['martingale_start'] = 1
+        await query.edit_message_text(
+            f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{context.user_data['range_label']}</b> | Mode: <b>Flat</b>\n\n🔢 Masukkan max losestreak:",
+            parse_mode="HTML"
+        )
+        return ASK_STREAK
+    else:
+        await query.edit_message_text(
+            f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{context.user_data['range_label']}</b> | Mode: <b>Martingale</b>\n\n🔢 Martingale aktif setelah losestreak ke berapa? (contoh: 1, 4)",
+            parse_mode="HTML"
+        )
+        return ASK_MARTINGALE_START
+
+async def ask_martingale_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update):
+        return ConversationHandler.END
+
+    try:
+        ms = int(update.message.text.strip())
+        if ms <= 0:
+            raise ValueError
+        context.user_data['martingale_start'] = ms
+    except:
+        await update.message.reply_text("❌ Input tidak valid. Masukkan angka bulat, contoh: 4")
+        return ASK_MARTINGALE_START
+
+    await update.message.reply_text(
+        f"✅ Martingale aktif di streak ke-{ms}\n\n🔢 Masukkan max losestreak:"
+    )
+    return ASK_STREAK
 
 async def ask_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global real_bot_process, real_base_amount, real_max_streak
@@ -117,10 +190,19 @@ async def ask_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     real_base_amount = context.user_data['base_amount']
     real_max_streak  = streak
+    betting_mode     = context.user_data.get('betting_mode', 'martingale')
+    martingale_start = context.user_data.get('martingale_start', 1)
+    w1_min           = context.user_data.get('w1_min', 53)
+    w1_max           = context.user_data.get('w1_max', 58)
+    range_label      = context.user_data.get('range_label', '53-58¢')
 
     env = os.environ.copy()
-    env['REAL_BASE_AMOUNT']    = str(real_base_amount)
-    env['REAL_MAX_LOSESTREAK'] = str(real_max_streak)
+    env['REAL_BASE_AMOUNT']      = str(real_base_amount)
+    env['REAL_MAX_LOSESTREAK']   = str(real_max_streak)
+    env['REAL_BETTING_MODE']     = betting_mode
+    env['REAL_MARTINGALE_START'] = str(martingale_start)
+    env['REAL_W1_MIN']           = str(w1_min)
+    env['REAL_W1_MAX']           = str(w1_max)
 
     # Hapus stopped file kalau ada
     if os.path.exists(STOPPED_FILE):
@@ -132,12 +214,16 @@ async def ask_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cwd=os.path.dirname(os.path.abspath(__file__))
     )
 
-    logger.info(f"✅ Real bot started. Base=${real_base_amount} | MaxStreak={real_max_streak}")
+    mode_label = "Martingale" if betting_mode == "martingale" else "Flat"
+    mode_detail = f" (aktif {martingale_start}x)" if betting_mode == "martingale" else ""
+    logger.info(f"✅ Real bot started. Base=${real_base_amount} | Range={range_label} | Mode={mode_label}{mode_detail} | MaxStreak={real_max_streak}")
+
     await update.message.reply_text(
         f"✅ <b>Real bot started</b>\n"
-        f"Base: <b>${real_base_amount}</b>\n"
-        f"Max streak: <b>{real_max_streak}x</b>\n"
-        f"Martingale: aktif",
+        f"Base    : <b>${real_base_amount}</b>\n"
+        f"Range   : <b>{range_label}</b>\n"
+        f"Mode    : <b>{mode_label}{mode_detail}</b>\n"
+        f"Max     : <b>{real_max_streak}x</b>",
         parse_mode="HTML"
     )
     return ConversationHandler.END
@@ -411,8 +497,11 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start)],
         states={
-            ASK_BASE:   [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_base)],
-            ASK_STREAK: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_streak)],
+            ASK_BASE:            [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_base)],
+            ASK_RANGE:           [CallbackQueryHandler(ask_range, pattern="^range_")],
+            ASK_MODE:            [CallbackQueryHandler(ask_mode, pattern="^mode_")],
+            ASK_MARTINGALE_START:[MessageHandler(filters.TEXT & ~filters.COMMAND, ask_martingale_start)],
+            ASK_STREAK:          [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_streak)],
         },
         fallbacks=[CommandHandler("cancel", cmd_cancel)],
     )

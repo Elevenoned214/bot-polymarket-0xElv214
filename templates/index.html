@@ -305,7 +305,7 @@
 
       <div class="panel-header">
         <div class="panel-title">◈ PAPER</div>
-        <div class="panel-meta">Shares: <span id="p-shares">10</span></div>
+        <div class="panel-meta">Range: <span class="c-cyan">53-58¢</span></div>
       </div>
 
       <!-- STAT CARDS -->
@@ -409,13 +409,7 @@
 
       <div class="panel-header">
         <div class="panel-title">◈ REAL</div>
-        <div class="panel-meta">
-          BAL: <span id="r-balance" class="c-green">-</span> USDC
-          &nbsp;|&nbsp;
-          Base: <span id="r-base" class="c-yellow">-</span>
-          &nbsp;|&nbsp;
-          Max: <span id="r-max-streak" class="c-red">-</span>x
-        </div>
+        <div class="panel-meta">Range: <span id="r-range" class="c-yellow">-</span></div>
       </div>
 
       <!-- STAT CARDS (4: balance, streak, base, pnl) -->
@@ -436,9 +430,9 @@
           <div class="sub">ENTRY</div>
         </div>
         <div class="stat-card">
-          <div class="label">PNL</div>
-          <div class="value" id="r-total-pnl">$0.00</div>
-          <div class="sub td-wr" id="r-winloss-sub">W:0 L:0</div>
+          <div class="label">MODE</div>
+          <div class="value c-cyan" id="r-mode-val">-</div>
+          <div class="sub" id="r-mode-sub">-</div>
         </div>
       </div>
 
@@ -475,16 +469,16 @@
         <div class="status-line" id="r-status-badge">Menunggu bot start...</div>
       </div>
 
-      <!-- BREAKDOWN + DAILY (dengan PNL) -->
+      <!-- BREAKDOWN + DAILY -->
       <div class="bottom-grid">
         <div class="box">
           <div class="box-title">BREAKDOWN 4 JAM</div>
           <table>
             <thead>
-              <tr><th>JAM</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th><th>PNL</th></tr>
+              <tr><th>JAM</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th></tr>
             </thead>
             <tbody id="r-breakdown-body">
-              <tr><td colspan="7" class="td-dim">NO DATA</td></tr>
+              <tr><td colspan="6" class="td-dim">NO DATA</td></tr>
             </tbody>
           </table>
         </div>
@@ -492,10 +486,10 @@
           <div class="box-title">DAILY RESULTS</div>
           <table>
             <thead>
-              <tr><th>DATE</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th><th>PNL</th></tr>
+              <tr><th>DATE</th><th>ENTRY</th><th>WIN</th><th>LOSE</th><th>WR</th><th>STREAK</th></tr>
             </thead>
             <tbody id="r-daily-body">
-              <tr><td colspan="7" class="td-dim">NO DATA</td></tr>
+              <tr><td colspan="6" class="td-dim">NO DATA</td></tr>
             </tbody>
           </table>
         </div>
@@ -609,21 +603,24 @@
     const live = d.live || {};
 
     // Panel header
-    const bal = live.balance != null ? live.balance.toFixed(2) : '-';
-    document.getElementById('r-balance').textContent    = bal;
-    document.getElementById('r-base').textContent       = d.base_amount != null ? '$'+d.base_amount : '-';
-    document.getElementById('r-max-streak').textContent = d.max_streak || '-';
+    document.getElementById('r-range').textContent = d.w1_range || '-';
 
-    // Stat cards baru
+    // Stat cards
     document.getElementById('r-balance-card').textContent = live.balance != null ? '$'+live.balance.toFixed(2) : '$-';
     document.getElementById('r-streak-card').textContent  = `${live.current_streak || 0}/${d.max_streak || '-'}`;
     document.getElementById('r-base-card').textContent    = d.base_amount != null ? '$'+d.base_amount : '$-';
 
-    const pnl = d.total_pnl || 0;
-    const pnlEl = document.getElementById('r-total-pnl');
-    pnlEl.textContent  = pnlStr(pnl);
-    pnlEl.className    = 'value ' + pnlClass(pnl);
-    document.getElementById('r-winloss-sub').textContent = `W:${d.total_win||0} L:${d.total_lose||0}`;
+    // Mode card
+    const mode = d.betting_mode || '-';
+    const modeLabel = mode === 'flat' ? 'Flat' : 'Mgale';
+    document.getElementById('r-mode-val').textContent = modeLabel;
+    if (mode === 'martingale') {
+      const ms = d.martingale_start || 1;
+      const streak = live.current_streak || 0;
+      document.getElementById('r-mode-sub').textContent = `${streak}/${ms}`;
+    } else {
+      document.getElementById('r-mode-sub').textContent = '-';
+    }
 
     // Live
     document.getElementById('r-live-market-num').textContent = live.market_num || '-';
@@ -640,7 +637,7 @@
     // Breakdown
     const tbody = document.getElementById('r-breakdown-body');
     tbody.innerHTML = (!d.breakdown || d.breakdown.length === 0)
-      ? `<tr><td colspan="7" class="td-dim">NO DATA</td></tr>`
+      ? `<tr><td colspan="6" class="td-dim">NO DATA</td></tr>`
       : d.breakdown.map(r => `
           <tr>
             <td class="td-dim">${r.label}</td>
@@ -649,13 +646,12 @@
             <td class="td-lose">${r.lose}</td>
             <td class="td-wr">${r.entry > 0 ? r.winrate+'%' : '-'}</td>
             <td class="td-lose">${r.max_streak > 0 ? r.max_streak+'x' : '-'}</td>
-            <td class="${pnlClass(r.pnl || 0)}">${r.pnl != null ? pnlStr(r.pnl) : '-'}</td>
           </tr>`).join('');
 
     // Daily
     const dbody = document.getElementById('r-daily-body');
     dbody.innerHTML = (!d.daily || d.daily.length === 0)
-      ? `<tr><td colspan="7" class="td-dim">NO DATA</td></tr>`
+      ? `<tr><td colspan="6" class="td-dim">NO DATA</td></tr>`
       : d.daily.map(r => `
           <tr>
             <td class="td-dim">${r.date}</td>
@@ -664,7 +660,6 @@
             <td class="td-lose">${r.lose}</td>
             <td class="td-wr">${r.entry > 0 ? r.winrate+'%' : '-'}</td>
             <td class="td-lose">${r.max_streak > 0 ? r.max_streak+'x' : '-'}</td>
-            <td class="${pnlClass(r.pnl || 0)}">${r.pnl != null ? pnlStr(r.pnl) : '-'}</td>
           </tr>`).join('');
 
     // History

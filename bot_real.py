@@ -54,8 +54,12 @@ PRIVATE_KEY    = os.getenv("PRIVATE_KEY")
 FUNDER_ADDRESS = os.getenv("FUNDER_ADDRESS")
 
 # Diset dari telegram_bot.py sebelum start
-BASE_AMOUNT    = float(os.getenv("REAL_BASE_AMOUNT", "1"))
-MAX_LOSESTREAK = int(os.getenv("REAL_MAX_LOSESTREAK", "6"))
+BASE_AMOUNT      = float(os.getenv("REAL_BASE_AMOUNT", "1"))
+MAX_LOSESTREAK   = int(os.getenv("REAL_MAX_LOSESTREAK", "6"))
+BETTING_MODE     = os.getenv("REAL_BETTING_MODE", "martingale").lower()  # flat | martingale
+MARTINGALE_START = int(os.getenv("REAL_MARTINGALE_START", "1"))
+W1_MIN           = int(os.getenv("REAL_W1_MIN", str(config.W1_MIN)))
+W1_MAX           = int(os.getenv("REAL_W1_MAX", str(config.W1_MAX)))
 
 # Global tracking
 market_count      = 0
@@ -154,6 +158,15 @@ def calc_next_bet(cum_loss, price_cents):
     p = price_cents / 100
     return cum_loss * p / (1 - p)
 
+def get_bet_amount(price_cents):
+    """Hitung bet berdasarkan mode dan streak saat ini."""
+    if BETTING_MODE == 'flat':
+        return BASE_AMOUNT
+    # martingale mode
+    if current_streak < MARTINGALE_START or cumulative_loss <= 0:
+        return BASE_AMOUNT
+    return round(calc_next_bet(cumulative_loss, price_cents), 2)
+
 def get_balance(client):
     try:
         from py_clob_client.clob_types import BalanceAllowanceParams, AssetType
@@ -245,7 +258,7 @@ def save_data(balance=None):
         live_state['balance'] = round(balance, 2)
 
     live_state['current_streak'] = current_streak
-    live_state['next_bet']       = round(BASE_AMOUNT if current_streak == 0 else calc_next_bet(cumulative_loss, live_state.get('yes_price') or 55), 2)
+    live_state['next_bet']       = get_bet_amount(live_state.get('yes_price') or 55)
 
     # PnL history untuk chart
     result_events_sorted = sorted([e for e in events if e['type'] in ('win', 'lose')], key=lambda x: x['time'])
@@ -270,9 +283,12 @@ def save_data(balance=None):
         'daily':        daily,
         'trades':       trades,
         'live':         live_state,
-        'base_amount':  BASE_AMOUNT,
-        'max_streak':   MAX_LOSESTREAK,
-        'pnl_history':  pnl_history,
+        'base_amount':     BASE_AMOUNT,
+        'max_streak':      MAX_LOSESTREAK,
+        'betting_mode':    BETTING_MODE,
+        'martingale_start': MARTINGALE_START,
+        'w1_range':        f"{W1_MIN}-{W1_MAX}¢",
+        'pnl_history':     pnl_history,
     }
 
     tmp = config.DATA_FILE + '.tmp'
@@ -615,9 +631,16 @@ def record_result(winner, pending_side, pending_price, pending_amount, client, y
             t.start()
     else:
         net = round(-pending_amount, 4)
-        cumulative_loss += pending_amount
-        current_streak  += 1
-        total_pnl       += net
+        current_streak += 1
+        total_pnl      += net
+        # Akumulasi cumulative_loss hanya saat martingale aktif
+        if BETTING_MODE == 'martingale':
+            if current_streak == MARTINGALE_START:
+                # Martingale baru aktif — reset ke last bet saja (losses sebelumnya hangus)
+                cumulative_loss = pending_amount
+            elif current_streak > MARTINGALE_START:
+                cumulative_loss += pending_amount
+            # else: streak < MARTINGALE_START → ignore
         events.append({'time': datetime.now(), 'type': 'lose', 'amount': pending_amount, 'pnl': net})
         logger.info(f"   😢 LOSE | {pending_side} @ {pending_price:.1f}¢ | ${net:.4f} | streak={current_streak}")
         save_data()
@@ -650,7 +673,8 @@ def main():
     logger.info(f"   Start      : {start_time_global.strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"   Base       : ${BASE_AMOUNT}")
     logger.info(f"   Max streak : {MAX_LOSESTREAK}x")
-    logger.info(f"   Entry      : W1 detik {config.W1_START}-{config.W1_END}, harga {config.W1_MIN}-{config.W1_MAX}¢")
+    logger.info(f"   Entry      : W1 detik {config.W1_START}-{config.W1_END}, harga {W1_MIN}-{W1_MAX}¢")
+    logger.info(f"   Mode       : {BETTING_MODE} (martingale_start={MARTINGALE_START})")
     logger.info("=" * 70)
 
     client       = setup_client()
@@ -777,7 +801,7 @@ def main():
                     locked_entry_side   = None   # sisi yang sudah dicoba (lock setelah FOK gagal)
                     locked_entry_token  = None
 
-                    next_bet = BASE_AMOUNT if current_streak == 0 else calc_next_bet(cumulative_loss, 55)
+                    next_bet = get_bet_amount(55)
 
                     live_state['market_num'] = market_count
                     live_state['pos_side']   = None
@@ -833,26 +857,23 @@ def main():
 
                 if locked_entry_side:
                     # Sudah pernah FOK gagal sebelumnya — hanya boleh retry di sisi yang sama
-                    if locked_entry_side == "YES" and config.W1_MIN <= yes_price <= config.W1_MAX:
+                    if locked_entry_side == "YES" and W1_MIN <= yes_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "YES", yes_price, yes_token
-                    elif locked_entry_side == "NO" and config.W1_MIN <= no_price <= config.W1_MAX:
+                    elif locked_entry_side == "NO" and W1_MIN <= no_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "NO", no_price, no_token
                     else:
                         logger.info(f"   ⏭ [W1] Harga {locked_entry_side} keluar range setelah FOK gagal, skip market ini")
                         entered = True  # skip, tidak entry market ini
                 else:
                     # Entry pertama — pilih sisi normal
-                    if config.W1_MIN <= yes_price <= config.W1_MAX:
+                    if W1_MIN <= yes_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "YES", yes_price, yes_token
-                    elif config.W1_MIN <= no_price <= config.W1_MAX:
+                    elif W1_MIN <= no_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "NO", no_price, no_token
 
                 if entry_price:
-                    # Hitung bet amount
-                    if current_streak == 0:
-                        bet_amount = BASE_AMOUNT
-                    else:
-                        bet_amount = round(calc_next_bet(cumulative_loss, entry_price), 2)
+                    # Hitung bet amount berdasarkan mode
+                    bet_amount = get_bet_amount(entry_price)
 
                     logger.info(f"   🟢 [W1] ENTRY {entry_side} @ {entry_price:.1f}¢ | Amount: ${bet_amount:.2f} | Streak: {current_streak}x")
 

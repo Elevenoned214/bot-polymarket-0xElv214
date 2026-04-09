@@ -1,6 +1,6 @@
 # Polymarket Trading Bot
 
-Bot trading otomatis untuk Polymarket menggunakan strategi entry Window 1 (W1) dengan sistem Martingale.
+Bot trading otomatis untuk Polymarket menggunakan strategi entry Window 1 (W1) dengan pilihan mode Martingale atau Flat.
 
 ---
 
@@ -9,8 +9,8 @@ Bot trading otomatis untuk Polymarket menggunakan strategi entry Window 1 (W1) d
 Bot memantau market Polymarket setiap detik dan mencari peluang entry berdasarkan kondisi berikut:
 
 - **Waktu entry:** Detik ke-30 sampai ke-80 dari market berjalan
-- **Range harga:** 53¢ sampai 58¢ (YES atau NO)
-- **Sistem taruhan:** Martingale — kalau kalah, taruhan berikutnya dinaikkan untuk menutup total kerugian sebelumnya
+- **Range harga:** Dipilih saat `/start` — `53-58¢` atau `42-47¢` (YES atau NO)
+- **Mode taruhan:** Dipilih saat `/start` — Martingale Recovery atau Flat
 - **Order type:** Market order (langsung tereksekusi, bukan limit)
 - **Auto-redeem:** Setelah market resolve, bot otomatis redeem posisi yang menang
 
@@ -18,8 +18,8 @@ Bot memantau market Polymarket setiap detik dan mencari peluang entry berdasarka
 
 ```
 Bot nyala → Tunggu market baru → Cek harga di detik 30-80
-→ Harga masuk range 53-58¢ → Entry → Tunggu resolve → Catat hasil
-→ Kalau kalah → Naikkan taruhan (Martingale) → Ulangi
+→ Harga masuk range → Entry → Tunggu resolve → Catat hasil
+→ Kalau kalah (Martingale) → Naikkan taruhan untuk recover → Ulangi
 → Kalau streak kalah > batas → Bot berhenti otomatis
 ```
 
@@ -33,7 +33,7 @@ Bot nyala → Tunggu market baru → Cek harga di detik 30-80
 | `bot_paper.py` | Bot simulasi (paper trading), tidak pakai uang asli |
 | `telegram_bot.py` | Controller bot via Telegram |
 | `dashboard.py` | Dashboard web untuk monitoring |
-| `config_real.py` | Konfigurasi strategi (range harga, timing) |
+| `config_real.py` | Konfigurasi default strategi (timing, range harga) |
 
 ---
 
@@ -43,9 +43,12 @@ Bot nyala → Tunggu market baru → Cek harga di detik 30-80
 - **Paper Trading** — simulasi tanpa modal, berjalan paralel untuk perbandingan
 - **Telegram Controller** — kontrol bot dari HP via Telegram
 - **Auto-redeem** — otomatis klaim hasil setelah market selesai
-- **Martingale Recovery** — taruhan naik otomatis untuk recover kerugian
+- **Martingale Recovery** — taruhan naik otomatis untuk recover kerugian, dengan threshold aktivasi
+- **Flat Mode** — taruhan tetap BASE_AMOUNT setiap entry, tanpa martingale
+- **Price Range Selection** — pilih range entry 53-58¢ atau 42-47¢ saat `/start`
+- **Martingale Start** — delay sebelum martingale aktif (misal: aktif baru di losestreak ke-4)
 - **Auto-stop** — bot berhenti sendiri kalau losestreak mencapai batas
-- **Dashboard Web** — pantau PNL, winrate, dan status bot secara real-time
+- **Dashboard Web** — pantau winrate, mode, dan status bot secara real-time
 - **Daily Summary** — laporan otomatis tiap jam 00:00 via Telegram
 - **Crash Detection** — notifikasi Telegram kalau bot crash/mati mendadak
 - **State Persistence** — posisi tersimpan, aman kalau bot restart
@@ -56,12 +59,38 @@ Bot nyala → Tunggu market baru → Cek harga di detik 30-80
 
 | Command | Fungsi |
 |---------|--------|
-| `/start` | Nyalain real bot (input base amount & max streak) |
+| `/start` | Nyalain real bot (setup base, range, mode, max streak) |
 | `/stop` | Matiin real bot |
 | `/status` | Cek status bot saat ini |
 | `/pnl` | Lihat PNL hari ini dan total |
 | `/balance` | Cek saldo wallet |
 | `/resetreal` | Reset semua data real trading |
+
+### Flow `/start`
+
+```
+/start
+→ "Masukkan base amount ($):"          → contoh: 3
+→ "Pilih price range:" [53-58¢][42-47¢]
+→ "Pilih mode:" [Martingale Recovery][Flat]
+→ (kalau Martingale) "Aktif setelah streak ke berapa?" → contoh: 4
+→ "Masukkan max losestreak:"           → contoh: 6
+→ ✅ Real bot started
+```
+
+---
+
+## Mode Betting
+
+### Martingale Recovery
+Taruhan berikutnya dihitung untuk menutup total kerugian yang sudah terakumulasi.
+
+- Formula: `next_bet = cumulative_loss × (price / (1 - price))`
+- Parameter `martingale_start`: berapa losestreak sebelum martingale aktif. Loss sebelum threshold dianggap hangus (tidak direcovery).
+- Contoh exposure base $3 max 6x: `martingale_start=1` → maks $162, `martingale_start=4` → maks $23.82
+
+### Flat
+Setiap entry selalu menggunakan BASE_AMOUNT, tidak peduli losestreak.
 
 ---
 
@@ -70,7 +99,7 @@ Bot nyala → Tunggu market baru → Cek harga di detik 30-80
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/USERNAME/polymarket-bot.git
+git clone https://github.com/Elevenoned214/polymarket-bot.git
 cd polymarket-bot
 ```
 
@@ -103,16 +132,7 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 >
 > **Cara dapat Chat ID:** Buka [@userinfobot](https://t.me/userinfobot) di Telegram → `/start` → ambil angka ID-nya.
 
-### 4. Sesuaikan Konfigurasi (Opsional)
-
-Edit `config_real.py` untuk mengubah parameter strategi:
-
-```python
-W1_MIN = 53   # Harga minimum entry (cents)
-W1_MAX = 58   # Harga maksimum entry (cents)
-```
-
-### 5. Jalankan Bot
+### 4. Jalankan Bot
 
 ```bash
 # Jalankan Telegram Bot (controller utama)
@@ -122,7 +142,7 @@ python telegram_bot.py
 
 Setelah itu kontrol bot dari Telegram dengan command `/start`.
 
-### 6. Jalankan Dashboard (Opsional)
+### 5. Jalankan Dashboard (Opsional)
 
 ```bash
 source venv/bin/activate
@@ -154,5 +174,6 @@ systemctl status polymarket-telegram
 ## Catatan Penting
 
 - File `.env` berisi private key wallet — **jangan pernah share atau upload ke GitHub**
-- Martingale bisa memperbesar kerugian kalau streak kalah panjang — set `max streak` sesuai kemampuan modal
+- Martingale bisa memperbesar kerugian kalau streak kalah panjang — set `max streak` dan `martingale_start` sesuai kemampuan modal
 - Bot paper dan real berjalan terpisah — paper tidak bisa dikontrol via Telegram
+- Range harga dan mode betting dipilih setiap kali `/start`, tidak perlu ubah config file
