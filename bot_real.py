@@ -932,9 +932,6 @@ def main():
                 g_pos1_slot = g_pos1_side = g_pos1_price = g_pos1_amount = g_pos1_taking_amount = g_pos1_balance_before = None
                 save_state(pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before)
 
-            # ── LOG TIAP 30 DETIK ──────────────────────────────
-            if market_elapsed % 30 == 0:
-                logger.info(f"⏱ Detik {market_elapsed} | YES: {yes_price:.1f}¢ NO: {no_price:.1f}¢")
 
             # ── PUNYA POSISI ───────────────────────────────────
             if pos1_side:
