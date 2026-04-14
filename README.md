@@ -2,6 +2,17 @@
 
 Bot trading otomatis untuk Polymarket menggunakan strategi entry Window 1 (W1) dengan pilihan mode Martingale atau Flat.
 
+> **Disclaimer:** Ini bukan bot AI/pintar. Bot ini hanya mengeksekusi strategi yang sudah ditentukan sendiri — entry di window waktu tertentu, range harga tertentu, dengan manajemen taruhan manual (Flat atau Martingale). Semua keputusan strategi ada di tangan pemilik bot. Bot hanya mengotomasi eksekusinya.
+
+---
+
+## Support / Referral
+
+Kalau repo ini berguna buat lo, boleh pakai referral Polymarket gue atau kirim tip ke address EVM gue. Siapa tau ada rejeki nomplok wkwk.
+
+- **Daftar Polymarket via referral gue:** [polymarket.com/?r=Elevenoned](https://polymarket.com/?r=Elevenoned)
+- **EVM Address (tip jar):** `0xc2b1945fb01112d6ced2c1f873c9ef7453e1491b`
+
 ---
 
 ## Cara Kerja Bot
