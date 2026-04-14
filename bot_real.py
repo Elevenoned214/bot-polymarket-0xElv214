@@ -70,6 +70,22 @@ current_streak    = 0
 total_pnl         = 0.0
 current_bet       = BASE_AMOUNT  # untuk martingale_2x
 
+# Global pending state (supaya signal_handler bisa akses)
+g_pending_slot           = None
+g_pending_side           = None
+g_pending_price          = None
+g_pending_amount         = None
+g_pending_market_num     = None
+g_pending_balance_before = None
+
+# Global pos1 state (entry aktif yang belum pending, supaya signal_handler bisa akses)
+g_pos1_slot           = None
+g_pos1_side           = None
+g_pos1_price          = None
+g_pos1_amount         = None
+g_pos1_taking_amount  = None
+g_pos1_balance_before = None
+
 # Live state untuk dashboard
 live_state = {
     "yes_price":      None,
@@ -110,16 +126,22 @@ def load_state():
             e["time"] = datetime.fromisoformat(e["time"])
             events.append(e)
         logger.info(f"✅ State loaded: {len(events)} events, cumLoss=${cumulative_loss:.2f}, streak={current_streak}")
-        return state.get("pending_slot"), state.get("pending_side"), state.get("pending_price"), state.get("pending_amount"), state.get("pending_market_num"), state.get("pending_balance_before")
+        return (
+            state.get("pending_slot"), state.get("pending_side"), state.get("pending_price"),
+            state.get("pending_amount"), state.get("pending_market_num"), state.get("pending_balance_before"),
+            state.get("pos1_slot"), state.get("pos1_side"), state.get("pos1_price"),
+            state.get("pos1_amount"), state.get("pos1_taking_amount"), state.get("pos1_balance_before"),
+        )
     except FileNotFoundError:
         start_time_global = datetime.now()
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None, None, None, None
     except Exception as e:
         logger.error(f"❌ load_state error: {e}")
         start_time_global = datetime.now()
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None, None, None, None
 
-def save_state(pending_slot=None, pending_side=None, pending_price=None, pending_amount=None, pending_market_num=None, pending_balance_before=None):
+def save_state(pending_slot=None, pending_side=None, pending_price=None, pending_amount=None, pending_market_num=None, pending_balance_before=None,
+               pos1_slot=None, pos1_side=None, pos1_price=None, pos1_amount=None, pos1_taking_amount=None, pos1_balance_before=None):
     state = {
         "market_count":           market_count,
         "cumulative_loss":        cumulative_loss,
@@ -132,6 +154,12 @@ def save_state(pending_slot=None, pending_side=None, pending_price=None, pending
         "pending_amount":         pending_amount,
         "pending_market_num":     pending_market_num,
         "pending_balance_before": pending_balance_before,
+        "pos1_slot":              pos1_slot,
+        "pos1_side":              pos1_side,
+        "pos1_price":             pos1_price,
+        "pos1_amount":            pos1_amount,
+        "pos1_taking_amount":     pos1_taking_amount,
+        "pos1_balance_before":    pos1_balance_before,
         "events":                 [{**e, "time": e["time"].isoformat()} for e in events],
     }
     with open(config.STATE_FILE, 'w') as f:
@@ -382,6 +410,27 @@ def setup_client():
     except Exception as e:
         logger.error(f"❌ Gagal koneksi: {e}")
         sys.exit(1)
+
+def get_paper_entry_for_slot(slot):
+    """
+    Baca state_paper.json, return side ("YES"/"NO") kalau paper sudah entry
+    di slot ini, atau None kalau belum.
+    slot = unix timestamp kelipatan 300.
+    """
+    try:
+        paper_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state_paper.json")
+        with open(paper_path, "r") as f:
+            data = json.load(f)
+        slot_end = slot + 299
+        for event in data.get("events", []):
+            if event["type"] == "entry":
+                t = datetime.fromisoformat(event["time"]).timestamp()
+                if slot <= t <= slot_end:
+                    return event["side"]
+        return None
+    except Exception as e:
+        logger.warning(f"⚠️ Gagal baca paper state: {e}")
+        return None
 
 def place_market_order(client, token_id, amount_usd):
     """Place market order dengan nominal USD. Side selalu BUY (beli token)."""
@@ -665,7 +714,8 @@ def record_result(winner, pending_side, pending_price, pending_amount, client, y
 
 def signal_handler(sig, frame):
     logger.info("\n🔴 Real bot dihentikan manual")
-    save_state()
+    save_state(g_pending_slot, g_pending_side, g_pending_price, g_pending_amount, g_pending_market_num, g_pending_balance_before,
+               g_pos1_slot, g_pos1_side, g_pos1_price, g_pos1_amount, g_pos1_taking_amount, g_pos1_balance_before)
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -676,9 +726,23 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def main():
     global market_count, start_time_global, cumulative_loss, current_streak
+    global g_pending_slot, g_pending_side, g_pending_price, g_pending_amount, g_pending_market_num, g_pending_balance_before
+    global g_pos1_slot, g_pos1_side, g_pos1_price, g_pos1_amount, g_pos1_taking_amount, g_pos1_balance_before
 
-    pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before = load_state()
+    (pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before,
+     loaded_pos1_slot, loaded_pos1_side, loaded_pos1_price, loaded_pos1_amount, loaded_pos1_taking_amount, loaded_pos1_balance_before) = load_state()
     pending_taking_amount = None
+
+    # Kalau ada pos1 tersimpan (entry aktif waktu bot stop sebelum 295s), promote ke pending
+    if loaded_pos1_side and not pending_slot:
+        logger.info(f"⚠️ Ditemukan entry aktif dari sesi sebelumnya: {loaded_pos1_side} @ {loaded_pos1_price}¢ ${loaded_pos1_amount} — promote ke pending")
+        pending_slot           = loaded_pos1_slot
+        pending_side           = loaded_pos1_side
+        pending_price          = loaded_pos1_price
+        pending_amount         = loaded_pos1_amount
+        pending_taking_amount  = loaded_pos1_taking_amount
+        pending_market_num     = market_count  # market terakhir yang tercatat
+        pending_balance_before = loaded_pos1_balance_before
 
     logger.info("=" * 70)
     logger.info("💰 REAL TRADING BOT")
@@ -686,7 +750,7 @@ def main():
     logger.info(f"   Start      : {start_time_global.strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"   Base       : ${BASE_AMOUNT}")
     logger.info(f"   Max streak : {MAX_LOSESTREAK}x")
-    logger.info(f"   Entry      : W1 detik {config.W1_START}-{config.W1_END}, harga {W1_MIN}-{W1_MAX}¢")
+    logger.info(f"   Entry      : Ikuti paper bot, harga {W1_MIN}-{W1_MAX}¢ (bebas waktu)")
     logger.info(f"   Mode       : {BETTING_MODE} (martingale_start={MARTINGALE_START})")
     logger.info("=" * 70)
 
@@ -801,6 +865,7 @@ def main():
                     if winner:
                         record_result(winner, pending_side, pending_price, pending_amount, client, redeem_yes, redeem_no, balance_before=pending_balance_before, slot=pending_slot, taking_amount=pending_taking_amount)
                         pending_slot = pending_side = pending_price = pending_amount = pending_market_num = pending_balance_before = None
+                        g_pending_slot = g_pending_side = g_pending_price = g_pending_amount = g_pending_market_num = g_pending_balance_before = None
 
                 yes_token, no_token, current_slot = get_current_token_id()
 
@@ -817,6 +882,7 @@ def main():
                     pos1_amount         = None
                     pos1_taking_amount  = None
                     pos1_balance_before = None
+                    g_pos1_slot = g_pos1_side = g_pos1_price = g_pos1_amount = g_pos1_taking_amount = g_pos1_balance_before = None
                     entered             = False
                     locked_entry_side   = None   # sisi yang sudah dicoba (lock setelah FOK gagal)
                     locked_entry_token  = None
@@ -827,7 +893,7 @@ def main():
                     live_state['pos_side']   = None
                     live_state['pos_price']  = None
                     live_state['pos_amount'] = None
-                    live_state['status']     = f"Menunggu W1 (detik {config.W1_START}-{config.W1_END}) | Next bet: ${next_bet:.2f}"
+                    live_state['status']     = f"Menunggu sinyal paper | harga {W1_MIN}-{W1_MAX}¢ | Next bet: ${next_bet:.2f}"
                     save_data(balance)
 
             if not yes_token or market_start is None:
@@ -856,6 +922,14 @@ def main():
                 pending_balance_before = pos1_balance_before
                 live_state['status']   = "🔍 Menunggu hasil..."
                 logger.info(f"   📌 Posisi #{market_count} ditandai pending")
+                g_pending_slot           = pending_slot
+                g_pending_side           = pending_side
+                g_pending_price          = pending_price
+                g_pending_amount         = pending_amount
+                g_pending_market_num     = pending_market_num
+                g_pending_balance_before = pending_balance_before
+                # pos1 sudah di-promote ke pending, clear dari state
+                g_pos1_slot = g_pos1_side = g_pos1_price = g_pos1_amount = g_pos1_taking_amount = g_pos1_balance_before = None
                 save_state(pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before)
 
             # ── LOG TIAP 30 DETIK ──────────────────────────────
@@ -869,8 +943,8 @@ def main():
                 live_state['pos_price'] = pos1_price
                 live_state['pos_amount']= pos1_amount
 
-            # ── CEK W1 ─────────────────────────────────────────
-            elif not entered and config.W1_START <= market_elapsed <= config.W1_END:
+            # ── CEK W1 (tunggu paper entry dulu, lalu scan harga) ──────
+            elif not entered and get_paper_entry_for_slot(current_slot):
                 entry_side   = None
                 entry_price  = None
                 entry_token  = None
@@ -910,6 +984,14 @@ def main():
                         pos1_taking_amount  = float(resp.get('takingAmount', 0))
                         pos1_balance_before = bal_before
 
+                        # Sync globals supaya signal_handler bisa simpan pos1 kalau bot dihentikan
+                        g_pos1_slot           = current_slot
+                        g_pos1_side           = pos1_side
+                        g_pos1_price          = pos1_price
+                        g_pos1_amount         = pos1_amount
+                        g_pos1_taking_amount  = pos1_taking_amount
+                        g_pos1_balance_before = pos1_balance_before
+
                         events.append({
                             'time':   datetime.now(),
                             'type':   'entry',
@@ -923,7 +1005,8 @@ def main():
                         live_state['pos_price']  = entry_price
                         live_state['pos_amount'] = bet_amount
                         save_data()
-                        save_state()
+                        save_state(pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before,
+                                   current_slot, pos1_side, pos1_price, pos1_amount, pos1_taking_amount, pos1_balance_before)
                     else:
                         # FOK gagal — lock sisi ini, retry di loop berikutnya tapi hanya sisi yang sama
                         locked_entry_side  = entry_side
@@ -935,7 +1018,8 @@ def main():
 
         except Exception as e:
             logger.error(f"❌ Error: {e}")
-            save_state(pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before)
+            save_state(pending_slot, pending_side, pending_price, pending_amount, pending_market_num, pending_balance_before,
+                       g_pos1_slot, g_pos1_side, g_pos1_price, g_pos1_amount, g_pos1_taking_amount, g_pos1_balance_before)
             time.sleep(5)
 
 if __name__ == "__main__":
