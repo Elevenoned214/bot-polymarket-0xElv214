@@ -17,22 +17,35 @@ Kalau repo ini berguna buat lo, boleh pakai referral Polymarket gue atau kirim t
 
 ## Cara Kerja Bot
 
-Bot memantau market Polymarket setiap detik dan mencari peluang entry berdasarkan kondisi berikut:
+Bot real **tidak entry sendiri** — ia mengikuti sinyal dari bot paper. Bot paper harus jalan lebih dulu.
 
-- **Waktu entry:** Detik ke-30 sampai ke-80 dari market berjalan
-- **Range harga:** Dipilih saat `/start` — `53-58¢` atau `42-47¢` (YES atau NO)
+### Alur Sinyal
+
+1. **Bot paper** memantau market dan entry saat harga masuk range W1
+2. **Bot real** baca `state_paper.json` — kalau paper sudah entry di slot market yang sama, bot real ikut entry
+3. Bot real pilih sisi (YES/NO) berdasarkan harga yang saat itu masuk range `W1_MIN–W1_MAX`
+4. Order dieksekusi sebagai market order (langsung tereksekusi)
+5. Setelah market resolve, bot catat WIN/LOSE dan otomatis redeem posisi menang
+
+### Kondisi Entry Real Bot
+
+- **Syarat utama:** Paper bot sudah entry di slot market yang sama
+- **Range harga:** Dipilih saat `/start` — `53-58¢` atau `42-47¢`
 - **Mode taruhan:** Dipilih saat `/start` — Martingale Recovery atau Flat
-- **Order type:** Market order (langsung tereksekusi, bukan limit)
-- **Auto-redeem:** Setelah market resolve, bot otomatis redeem posisi yang menang
+- **Order type:** Market order
 
 ### Alur Singkat
 
 ```
-Bot nyala → Tunggu market baru → Cek harga di detik 30-80
+Paper bot nyala → Entry saat harga masuk range
+       ↓
+Real bot nyala → Deteksi paper sudah entry → Cek harga saat ini
 → Harga masuk range → Entry → Tunggu resolve → Catat hasil
 → Kalau kalah (Martingale) → Naikkan taruhan untuk recover → Ulangi
 → Kalau streak kalah > batas → Bot berhenti otomatis
 ```
+
+> **Penting:** Jalankan `bot_paper.py` (atau via service) **sebelum** menjalankan real bot. Tanpa paper bot aktif, real bot tidak akan pernah entry.
 
 ---
 
@@ -186,5 +199,6 @@ systemctl status polymarket-telegram
 
 - File `.env` berisi private key wallet — **jangan pernah share atau upload ke GitHub**
 - Martingale bisa memperbesar kerugian kalau streak kalah panjang — set `max streak` dan `martingale_start` sesuai kemampuan modal
-- Bot paper dan real berjalan terpisah — paper tidak bisa dikontrol via Telegram
+- Bot paper **harus jalan lebih dulu** sebelum real bot — real bot pakai sinyal paper sebagai trigger entry
+- Bot paper tidak bisa dikontrol via Telegram, jalankan manual atau via service
 - Range harga dan mode betting dipilih setiap kali `/start`, tidak perlu ubah config file
