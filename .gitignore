@@ -1,5 +1,23 @@
-venv/
-__pycache__/
-*.log
+# Environment
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+
+# State & data (runtime files)
+state_paper.json
 state_real.json
+data_paper.json
+data_real.json
+real_bot_stopped.json
+
+# Logs
+*.log
+
+# Misc
+.DS_Store
+*.tmp

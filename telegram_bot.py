@@ -126,6 +126,7 @@ async def ask_range(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [[
         InlineKeyboardButton("Martingale Recovery", callback_data="mode_martingale"),
+        InlineKeyboardButton("Martingale 2x", callback_data="mode_martingale_2x"),
         InlineKeyboardButton("Flat", callback_data="mode_flat"),
     ]]
     await query.edit_message_text(
@@ -139,22 +140,28 @@ async def ask_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    mode = "martingale" if query.data == "mode_martingale" else "flat"
+    if query.data == "mode_martingale":
+        mode = "martingale"
+    elif query.data == "mode_martingale_2x":
+        mode = "martingale_2x"
+    else:
+        mode = "flat"
     context.user_data['betting_mode'] = mode
 
-    if mode == "flat":
-        context.user_data['martingale_start'] = 1
+    if mode == "martingale":
         await query.edit_message_text(
-            f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{context.user_data['range_label']}</b> | Mode: <b>Flat</b>\n\n🔢 Masukkan max losestreak:",
-            parse_mode="HTML"
-        )
-        return ASK_STREAK
-    else:
-        await query.edit_message_text(
-            f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{context.user_data['range_label']}</b> | Mode: <b>Martingale</b>\n\n🔢 Martingale aktif setelah losestreak ke berapa? (contoh: 1, 4)",
+            f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{context.user_data['range_label']}</b> | Mode: <b>Martingale Recovery</b>\n\n🔢 Martingale aktif setelah losestreak ke berapa? (contoh: 1, 4)",
             parse_mode="HTML"
         )
         return ASK_MARTINGALE_START
+    else:
+        context.user_data['martingale_start'] = 1
+        mode_label = "Martingale 2x" if mode == "martingale_2x" else "Flat"
+        await query.edit_message_text(
+            f"✅ Base: <b>${context.user_data['base_amount']}</b> | Range: <b>{context.user_data['range_label']}</b> | Mode: <b>{mode_label}</b>\n\n🔢 Masukkan max losestreak:",
+            parse_mode="HTML"
+        )
+        return ASK_STREAK
 
 async def ask_martingale_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
@@ -196,6 +203,7 @@ async def ask_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
     w1_max           = context.user_data.get('w1_max', 58)
     range_label      = context.user_data.get('range_label', '53-58¢')
 
+    load_dotenv(override=True)
     env = os.environ.copy()
     env['REAL_BASE_AMOUNT']      = str(real_base_amount)
     env['REAL_MAX_LOSESTREAK']   = str(real_max_streak)
@@ -214,8 +222,15 @@ async def ask_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cwd=os.path.dirname(os.path.abspath(__file__))
     )
 
-    mode_label = "Martingale" if betting_mode == "martingale" else "Flat"
-    mode_detail = f" (aktif {martingale_start}x)" if betting_mode == "martingale" else ""
+    if betting_mode == "martingale":
+        mode_label = "Martingale Recovery"
+        mode_detail = f" (aktif {martingale_start}x)"
+    elif betting_mode == "martingale_2x":
+        mode_label = "Martingale 2x"
+        mode_detail = ""
+    else:
+        mode_label = "Flat"
+        mode_detail = ""
     logger.info(f"✅ Real bot started. Base=${real_base_amount} | Range={range_label} | Mode={mode_label}{mode_detail} | MaxStreak={real_max_streak}")
 
     await update.message.reply_text(

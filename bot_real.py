@@ -56,7 +56,7 @@ FUNDER_ADDRESS = os.getenv("FUNDER_ADDRESS")
 # Diset dari telegram_bot.py sebelum start
 BASE_AMOUNT      = float(os.getenv("REAL_BASE_AMOUNT", "1"))
 MAX_LOSESTREAK   = int(os.getenv("REAL_MAX_LOSESTREAK", "6"))
-BETTING_MODE     = os.getenv("REAL_BETTING_MODE", "martingale").lower()  # flat | martingale
+BETTING_MODE     = os.getenv("REAL_BETTING_MODE", "martingale").lower()  # flat | martingale | martingale_2x
 MARTINGALE_START = int(os.getenv("REAL_MARTINGALE_START", "1"))
 W1_MIN           = int(os.getenv("REAL_W1_MIN", str(config.W1_MIN)))
 W1_MAX           = int(os.getenv("REAL_W1_MAX", str(config.W1_MAX)))
@@ -68,6 +68,7 @@ start_time_global = None
 cumulative_loss   = 0.0
 current_streak    = 0
 total_pnl         = 0.0
+current_bet       = BASE_AMOUNT  # untuk martingale_2x
 
 # Live state untuk dashboard
 live_state = {
@@ -90,7 +91,7 @@ live_state = {
 # ─────────────────────────────────────────
 
 def load_state():
-    global market_count, events, start_time_global, cumulative_loss, current_streak, total_pnl
+    global market_count, events, start_time_global, cumulative_loss, current_streak, total_pnl, current_bet
     try:
         with open(config.STATE_FILE, 'r') as f:
             state = json.load(f)
@@ -99,6 +100,7 @@ def load_state():
         # supaya setiap restart selalu mulai dari base amount
         cumulative_loss   = 0.0
         current_streak    = 0
+        current_bet       = BASE_AMOUNT
         total_pnl         = state.get("total_pnl", 0.0)
         start_str         = state.get("start_time")
         start_time_global = datetime.fromisoformat(start_str) if start_str else datetime.now()
@@ -162,7 +164,9 @@ def get_bet_amount(price_cents):
     """Hitung bet berdasarkan mode dan streak saat ini."""
     if BETTING_MODE == 'flat':
         return BASE_AMOUNT
-    # martingale mode
+    if BETTING_MODE == 'martingale_2x':
+        return round(current_bet, 2)
+    # martingale recovery mode
     if current_streak < MARTINGALE_START or cumulative_loss <= 0:
         return BASE_AMOUNT
     return round(calc_next_bet(cumulative_loss, price_cents), 2)
@@ -239,7 +243,12 @@ def save_data(balance=None):
     result_events = [e for e in events if e['type'] in ('win', 'lose')]
     trades = []
     for i, entry_e in enumerate(entry_events):
-        result = result_events[i] if i < len(result_events) else None
+        next_entry_time = entry_events[i + 1]['time'] if i + 1 < len(entry_events) else None
+        result = next(
+            (r for r in result_events
+             if r['time'] >= entry_e['time'] and (next_entry_time is None or r['time'] < next_entry_time)),
+            None
+        )
         trades.append({
             'time':   entry_e['time'].strftime('%H:%M:%S'),
             'side':   entry_e.get('side', '-'),
@@ -609,11 +618,13 @@ def _redeem_bg(slot, client):
         logger.warning(f"⚠️ _redeem_bg error: {e}")
 
 def record_result(winner, pending_side, pending_price, pending_amount, client, yes_token, no_token, balance_before=None, slot=None, taking_amount=None):
-    global cumulative_loss, current_streak, total_pnl
+    global cumulative_loss, current_streak, total_pnl, current_bet
 
     if winner == pending_side:
         cumulative_loss = 0.0
         current_streak  = 0
+        if BETTING_MODE == 'martingale_2x':
+            current_bet = BASE_AMOUNT
         # Pakai takingAmount dari order response (actual shares) kalau ada,
         # fallback ke teoritis kalau tidak ada (misal restart)
         if taking_amount and taking_amount > 0:
@@ -633,8 +644,10 @@ def record_result(winner, pending_side, pending_price, pending_amount, client, y
         net = round(-pending_amount, 4)
         current_streak += 1
         total_pnl      += net
-        # Akumulasi cumulative_loss hanya saat martingale aktif
-        if BETTING_MODE == 'martingale':
+        # Update bet tracking per mode
+        if BETTING_MODE == 'martingale_2x':
+            current_bet = round(current_bet * 2, 2)
+        elif BETTING_MODE == 'martingale':
             if current_streak == MARTINGALE_START:
                 # Martingale baru aktif — reset ke last bet saja (losses sebelumnya hangus)
                 cumulative_loss = pending_amount
@@ -692,12 +705,19 @@ def main():
     balance = get_balance(client)
     save_data(balance)
 
-    last_redeem_check = 0
+    last_redeem_check  = 0
+    last_balance_check = 0
 
     while True:
         try:
             now  = int(time.time())
             slot = (now // 300) * 300
+
+            # ── PERIODIC BALANCE CHECK (tiap 1 menit) ────────────
+            if now - last_balance_check >= 60:
+                last_balance_check = now
+                balance = get_balance(client)
+                save_data(balance)
 
             # ── PERIODIC REDEEM CHECK (tiap 5 menit) ─────────────
             if now - last_redeem_check >= 300:

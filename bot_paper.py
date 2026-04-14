@@ -38,6 +38,42 @@ events            = []
 start_time_global = None
 total_pnl         = 0.0
 
+STATE_FILE = 'state_paper.json'
+
+def load_state():
+    global market_count, total_pnl, start_time_global, events
+    if not os.path.exists(STATE_FILE):
+        return
+    try:
+        with open(STATE_FILE, 'r') as f:
+            state = json.load(f)
+        start_time_global = datetime.fromisoformat(state['start_time'])
+        market_count      = state.get('market_count', 0)
+        total_pnl         = state.get('total_pnl', 0.0)
+        events = []
+        for e in state.get('events', []):
+            ev = dict(e)
+            ev['time'] = datetime.fromisoformat(e['time'])
+            events.append(ev)
+        logger.info(f"📂 State loaded: {len(events)} events, market #{market_count}, PnL={total_pnl:.2f}")
+    except Exception as ex:
+        logger.warning(f"⚠️ Gagal load state: {ex}, mulai fresh.")
+
+def save_state():
+    state = {
+        'start_time':   start_time_global.isoformat() if start_time_global else datetime.now().isoformat(),
+        'market_count': market_count,
+        'total_pnl':    total_pnl,
+        'events': [
+            {**{k: v for k, v in e.items() if k != 'time'}, 'time': e['time'].isoformat()}
+            for e in events
+        ],
+    }
+    tmp = STATE_FILE + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(state, f)
+    os.replace(tmp, STATE_FILE)
+
 # Live state untuk dashboard
 live_state = {
     "yes_price":      None,
@@ -305,6 +341,7 @@ def record_result(winner, pending_side, pending_price):
         total_pnl += pnl
         events.append({'time': datetime.now(), 'type': 'lose', 'shares': config.SHARES, 'pnl': pnl})
         logger.info(f"   😢 LOSE | {pending_side} {pending_price:.1f}¢ | -${config.SHARES:.2f}")
+    save_state()
     save_data()
 
 # ─────────────────────────────────────────
@@ -314,7 +351,9 @@ def record_result(winner, pending_side, pending_price):
 def main():
     global market_count, start_time_global
 
-    start_time_global = datetime.now()
+    load_state()
+    if start_time_global is None:
+        start_time_global = datetime.now()
 
     logger.info("=" * 70)
     logger.info("📊 PAPER TRADING - Pattern Finder")
@@ -467,6 +506,7 @@ def main():
                     live_state['pos_price'] = entry_price
 
                     logger.info(f"   🟢 [W1] ENTRY {entry_side} @ {entry_price:.1f}¢ | Shares: {config.SHARES}")
+                    save_state()
                     save_data()
 
             save_data()
