@@ -594,6 +594,34 @@ def redeem_positions(slot):
     t = threading.Thread(target=_redeem_worker, args=(slot,), daemon=True)
     t.start()
 
+def _redeem_worker_by_condition_id(condition_id):
+    """Background thread: redeem langsung pakai conditionId (tanpa gamma API lookup)."""
+    try:
+        from web3.middleware import ExtraDataToPOAMiddleware
+        w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
+        w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+        if not w3.is_connected():
+            logger.warning(f"⚠️ redeem cid: gagal connect ke {POLYGON_RPC}")
+            return
+        time.sleep(5)
+        for attempt in range(1, 6):
+            try:
+                tx_hash = _safe_exec_redeem(w3, condition_id)
+                logger.info(f"   💰 Redeem cid tx (attempt {attempt}): {tx_hash.hex()}")
+                receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+                if receipt.status == 1:
+                    logger.info(f"   ✅ Redeem cid OK: block {receipt.blockNumber}")
+                    return
+                else:
+                    if attempt < 5:
+                        time.sleep(30)
+            except Exception as e:
+                logger.warning(f"   ⚠️ Redeem cid attempt {attempt} error: {e}")
+                if attempt < 5:
+                    time.sleep(30)
+    except Exception as e:
+        logger.warning(f"⚠️ _redeem_worker_by_condition_id error: {e}")
+
 def _redeem_and_get_pnl(slot, balance_before, client):
     """Synchronous redeem lalu cek balance. Return actual PnL."""
     try:
@@ -784,24 +812,41 @@ def main():
                 save_data(balance)
 
             # ── PERIODIC REDEEM CHECK (tiap 5 menit) ─────────────
-            if now - last_redeem_check >= 300:
+            if now - last_redeem_check >= 60:
                 last_redeem_check = now
                 try:
-                    resp = requests.get(
-                        f"https://data-api.polymarket.com/positions"
-                        f"?user={FUNDER_ADDRESS}&sizeThreshold=0.01&limit=500",
-                        timeout=5
-                    ).json()
+                    all_positions = []
+                    _offset = 0
+                    _limit  = 500
+                    while True:
+                        _resp = requests.get(
+                            f"https://data-api.polymarket.com/positions"
+                            f"?user={FUNDER_ADDRESS}&sizeThreshold=0.01&limit={_limit}&offset={_offset}",
+                            timeout=5
+                        ).json()
+                        all_positions.extend(_resp)
+                        if len(_resp) < _limit:
+                            break
+                        _offset += _limit
                     pending_redeems = [
-                        x for x in resp
+                        x for x in all_positions
                         if x.get('redeemable') and x.get('currentValue', 0) > 0
                     ]
                     if pending_redeems:
                         logger.info(f"💰 Ditemukan {len(pending_redeems)} posisi redeemable")
                         for pos in pending_redeems:
-                            s = int(pos['slug'].split('-')[-1])
+                            cid = pos.get('conditionId')
                             logger.info(f"   → Redeem ${pos['currentValue']:.2f} | {pos['title']}")
-                            redeem_positions(s)
+                            if cid:
+                                # Punya conditionId langsung — redeem tanpa gamma API lookup
+                                t = threading.Thread(
+                                    target=_redeem_worker_by_condition_id,
+                                    args=(cid,), daemon=True
+                                )
+                                t.start()
+                            else:
+                                s = int(pos['slug'].split('-')[-1])
+                                redeem_positions(s)
                 except Exception as e:
                     logger.warning(f"⚠️ periodic redeem check error: {e}")
 
@@ -886,6 +931,7 @@ def main():
                     entered             = False
                     locked_entry_side   = None   # sisi yang sudah dicoba (lock setelah FOK gagal)
                     locked_entry_token  = None
+                    paper_entry_time    = None   # waktu pertama paper entry terdeteksi
 
                     next_bet = get_bet_amount(55)
 
@@ -893,7 +939,7 @@ def main():
                     live_state['pos_side']   = None
                     live_state['pos_price']  = None
                     live_state['pos_amount'] = None
-                    live_state['status']     = f"Menunggu sinyal paper | harga {W1_MIN}-{W1_MAX}¢ | Next bet: ${next_bet:.2f}"
+                    live_state['status']     = f"Menunggu sinyal paper | harga ≤{W1_MAX}¢ | Next bet: ${next_bet:.2f}"
                     save_data(balance)
 
             if not yes_token or market_start is None:
@@ -942,24 +988,32 @@ def main():
 
             # ── CEK W1 (tunggu paper entry dulu, lalu scan harga) ──────
             elif not entered and get_paper_entry_for_slot(current_slot):
+                # Catat waktu pertama paper entry terdeteksi
+                if paper_entry_time is None:
+                    paper_entry_time = now
+
                 entry_side   = None
                 entry_price  = None
                 entry_token  = None
 
-                if locked_entry_side:
+                # Timeout 60 detik dari paper entry
+                if now - paper_entry_time > 180:
+                    logger.info(f"   ⏭ [W1] Timeout 180s dari paper entry, skip market ini")
+                    entered = True
+                elif locked_entry_side:
                     # Sudah pernah FOK gagal sebelumnya — hanya boleh retry di sisi yang sama
-                    if locked_entry_side == "YES" and W1_MIN <= yes_price <= W1_MAX:
+                    if locked_entry_side == "YES" and yes_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "YES", yes_price, yes_token
-                    elif locked_entry_side == "NO" and W1_MIN <= no_price <= W1_MAX:
+                    elif locked_entry_side == "NO" and no_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "NO", no_price, no_token
                     else:
                         logger.info(f"   ⏭ [W1] Harga {locked_entry_side} keluar range setelah FOK gagal, skip market ini")
                         entered = True  # skip, tidak entry market ini
                 else:
                     # Entry pertama — pilih sisi normal
-                    if W1_MIN <= yes_price <= W1_MAX:
+                    if yes_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "YES", yes_price, yes_token
-                    elif W1_MIN <= no_price <= W1_MAX:
+                    elif no_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "NO", no_price, no_token
 
                 if entry_price:

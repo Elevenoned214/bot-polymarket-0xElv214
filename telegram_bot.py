@@ -100,8 +100,8 @@ async def ask_base(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_BASE
 
     keyboard = [[
-        InlineKeyboardButton("53-58¢", callback_data="range_53_58"),
-        InlineKeyboardButton("42-47¢", callback_data="range_42_47"),
+        InlineKeyboardButton("≤58¢", callback_data="range_53_58"),
+        InlineKeyboardButton("≤47¢", callback_data="range_42_47"),
     ]]
     await update.message.reply_text(
         f"✅ Base: <b>${amount}</b>\n\n📊 Pilih price range:",
@@ -115,13 +115,13 @@ async def ask_range(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "range_53_58":
-        context.user_data['w1_min'] = 53
+        context.user_data['w1_min'] = 0
         context.user_data['w1_max'] = 58
-        range_label = "53-58¢"
+        range_label = "≤58¢"
     else:
-        context.user_data['w1_min'] = 42
+        context.user_data['w1_min'] = 0
         context.user_data['w1_max'] = 47
-        range_label = "42-47¢"
+        range_label = "≤47¢"
     context.user_data['range_label'] = range_label
 
     keyboard = [[
@@ -201,7 +201,7 @@ async def ask_streak(update: Update, context: ContextTypes.DEFAULT_TYPE):
     martingale_start = context.user_data.get('martingale_start', 1)
     w1_min           = context.user_data.get('w1_min', 53)
     w1_max           = context.user_data.get('w1_max', 58)
-    range_label      = context.user_data.get('range_label', '53-58¢')
+    range_label      = context.user_data.get('range_label', '≤58¢')
 
     load_dotenv(override=True)
     env = os.environ.copy()
