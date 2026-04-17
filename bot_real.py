@@ -1010,11 +1010,21 @@ def main():
                         logger.info(f"   ⏭ [W1] Harga {locked_entry_side} keluar range setelah FOK gagal, skip market ini")
                         entered = True  # skip, tidak entry market ini
                 else:
-                    # Entry pertama — pilih sisi normal
-                    if yes_price <= W1_MAX:
-                        entry_side, entry_price, entry_token = "YES", yes_price, yes_token
-                    elif no_price <= W1_MAX:
-                        entry_side, entry_price, entry_token = "NO", no_price, no_token
+                    # Entry pertama
+                    if W1_MAX < 50:
+                        # Under 47 mode — masuk sisi BERLAWANAN dari paper
+                        paper_side  = get_paper_entry_for_slot(current_slot)
+                        target_side = "NO" if paper_side == "YES" else "YES"
+                        if target_side == "YES" and yes_price <= W1_MAX:
+                            entry_side, entry_price, entry_token = "YES", yes_price, yes_token
+                        elif target_side == "NO" and no_price <= W1_MAX:
+                            entry_side, entry_price, entry_token = "NO", no_price, no_token
+                    else:
+                        # Under 58 mode — ngikut arah paper (cek YES dulu)
+                        if yes_price <= W1_MAX:
+                            entry_side, entry_price, entry_token = "YES", yes_price, yes_token
+                        elif no_price <= W1_MAX:
+                            entry_side, entry_price, entry_token = "NO", no_price, no_token
 
                 if entry_price:
                     # Hitung bet amount berdasarkan mode
