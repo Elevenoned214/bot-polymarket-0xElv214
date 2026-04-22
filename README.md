@@ -23,7 +23,7 @@ Bot real **tidak entry sendiri** — ia mengikuti sinyal dari bot paper. Bot pap
 
 1. **Bot paper** memantau market dan entry saat harga masuk range W1
 2. **Bot real** baca `state_paper.json` — kalau paper sudah entry di slot market yang sama, bot real ikut entry
-3. Bot real pilih sisi (YES/NO) berdasarkan harga yang saat itu masuk range `W1_MIN–W1_MAX`
+3. Bot real ikut sisi (YES/NO) yang sama dengan paper, asalkan harga di sisi itu masih dalam range `W1_MIN–W1_MAX`
 4. Order dieksekusi sebagai market order (langsung tereksekusi)
 5. Setelah market resolve, bot catat WIN/LOSE dan otomatis redeem posisi menang
 

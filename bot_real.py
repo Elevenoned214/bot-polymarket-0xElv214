@@ -761,16 +761,24 @@ def main():
      loaded_pos1_slot, loaded_pos1_side, loaded_pos1_price, loaded_pos1_amount, loaded_pos1_taking_amount, loaded_pos1_balance_before) = load_state()
     pending_taking_amount = None
 
-    # Kalau ada pos1 tersimpan (entry aktif waktu bot stop sebelum 295s), promote ke pending
+    # Kalau ada pos1 tersimpan (entry aktif waktu bot stop):
+    #  - slot masih sama dengan current real slot → restore sebagai pos1 aktif (jangan resolve, market belum expired)
+    #  - slot udah lewat → promote ke pending (siap diresolve)
+    restore_pos1_active = False
     if loaded_pos1_side and not pending_slot:
-        logger.info(f"⚠️ Ditemukan entry aktif dari sesi sebelumnya: {loaded_pos1_side} @ {loaded_pos1_price}¢ ${loaded_pos1_amount} — promote ke pending")
-        pending_slot           = loaded_pos1_slot
-        pending_side           = loaded_pos1_side
-        pending_price          = loaded_pos1_price
-        pending_amount         = loaded_pos1_amount
-        pending_taking_amount  = loaded_pos1_taking_amount
-        pending_market_num     = market_count  # market terakhir yang tercatat
-        pending_balance_before = loaded_pos1_balance_before
+        current_real_slot = (int(time.time()) // 300) * 300
+        if loaded_pos1_slot == current_real_slot:
+            logger.info(f"♻️ Restart di market yang sama: {loaded_pos1_side} @ {loaded_pos1_price}¢ ${loaded_pos1_amount} — restore sebagai pos1, tunggu slot expired")
+            restore_pos1_active = True
+        else:
+            logger.info(f"⚠️ Ditemukan entry aktif dari sesi sebelumnya: {loaded_pos1_side} @ {loaded_pos1_price}¢ ${loaded_pos1_amount} — promote ke pending")
+            pending_slot           = loaded_pos1_slot
+            pending_side           = loaded_pos1_side
+            pending_price          = loaded_pos1_price
+            pending_amount         = loaded_pos1_amount
+            pending_taking_amount  = loaded_pos1_taking_amount
+            pending_market_num     = market_count  # market terakhir yang tercatat
+            pending_balance_before = loaded_pos1_balance_before
 
     logger.info("=" * 70)
     logger.info("💰 REAL TRADING BOT")
@@ -793,6 +801,46 @@ def main():
     pos1_taking_amount  = None
     pos1_balance_before = None
     entered             = False
+    locked_entry_side   = None
+    locked_entry_token  = None
+    paper_entry_time    = None
+
+    # Restore pos1 aktif kalau restart di tengah market yang sama
+    if restore_pos1_active:
+        try:
+            yt, nt = get_token_id_for_slot(loaded_pos1_slot)
+            if yt and nt:
+                yes_token, no_token = yt, nt
+                current_slot        = loaded_pos1_slot
+                market_start        = loaded_pos1_slot
+                pos1_side           = loaded_pos1_side
+                pos1_price          = loaded_pos1_price
+                pos1_amount         = loaded_pos1_amount
+                pos1_taking_amount  = loaded_pos1_taking_amount
+                pos1_balance_before = loaded_pos1_balance_before
+                entered             = True
+                g_pos1_slot           = current_slot
+                g_pos1_side           = pos1_side
+                g_pos1_price          = pos1_price
+                g_pos1_amount         = pos1_amount
+                g_pos1_taking_amount  = pos1_taking_amount
+                g_pos1_balance_before = pos1_balance_before
+                live_state['pos_side']   = pos1_side
+                live_state['pos_price']  = pos1_price
+                live_state['pos_amount'] = pos1_amount
+                live_state['status']     = f"♻️ Restored {pos1_side} @ {pos1_price:.1f}¢ | ${pos1_amount:.2f}"
+                logger.info(f"   ✅ Pos1 restored — slot={current_slot}, tokens fetched")
+            else:
+                raise RuntimeError("token fetch returned None")
+        except Exception as e:
+            logger.warning(f"   ⚠️ Gagal restore pos1 ({e}) — fallback promote ke pending")
+            pending_slot           = loaded_pos1_slot
+            pending_side           = loaded_pos1_side
+            pending_price          = loaded_pos1_price
+            pending_amount         = loaded_pos1_amount
+            pending_taking_amount  = loaded_pos1_taking_amount
+            pending_market_num     = market_count
+            pending_balance_before = loaded_pos1_balance_before
 
     balance = get_balance(client)
     save_data(balance)
@@ -870,6 +918,18 @@ def main():
 
             # ── MARKET BARU ──────────────────────────────────────
             if slot != current_slot:
+                # Defensive: jangan resolve pending kalau masih di slot yang sama (window belum expired).
+                # Bisa kejadian saat startup sebelum cross slot pertama. Tunggu sampai slot beneran lewat.
+                if pending_slot and pending_slot >= slot:
+                    if not yes_token:
+                        yt, nt = get_token_id_for_slot(pending_slot)
+                        if yt and nt:
+                            yes_token, no_token = yt, nt
+                            market_start = pending_slot
+                    current_slot = pending_slot
+                    time.sleep(config.LOOP_INTERVAL)
+                    continue
+
                 market_count += 1
 
                 if pending_slot and pending_side:
@@ -1001,14 +1061,13 @@ def main():
                     logger.info(f"   ⏭ [W1] Timeout 180s dari paper entry, skip market ini")
                     entered = True
                 elif locked_entry_side:
-                    # Sudah pernah FOK gagal sebelumnya — hanya boleh retry di sisi yang sama
+                    # Sudah pernah FOK gagal sebelumnya — hanya boleh retry di sisi yang sama.
+                    # Kalau harga keluar range, tunggu — jangan skip market (biar bisa masuk
+                    # lagi kalau harga balik <= W1_MAX sebelum timeout 180s).
                     if locked_entry_side == "YES" and yes_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "YES", yes_price, yes_token
                     elif locked_entry_side == "NO" and no_price <= W1_MAX:
                         entry_side, entry_price, entry_token = "NO", no_price, no_token
-                    else:
-                        logger.info(f"   ⏭ [W1] Harga {locked_entry_side} keluar range setelah FOK gagal, skip market ini")
-                        entered = True  # skip, tidak entry market ini
                 else:
                     # Entry pertama
                     if W1_MAX < 50:
@@ -1020,10 +1079,11 @@ def main():
                         elif target_side == "NO" and no_price <= W1_MAX:
                             entry_side, entry_price, entry_token = "NO", no_price, no_token
                     else:
-                        # Under 58 mode — ngikut arah paper (cek YES dulu)
-                        if yes_price <= W1_MAX:
+                        # Under 58 mode — ngikut arah paper
+                        paper_side = get_paper_entry_for_slot(current_slot)
+                        if paper_side == "YES" and yes_price <= W1_MAX:
                             entry_side, entry_price, entry_token = "YES", yes_price, yes_token
-                        elif no_price <= W1_MAX:
+                        elif paper_side == "NO" and no_price <= W1_MAX:
                             entry_side, entry_price, entry_token = "NO", no_price, no_token
 
                 if entry_price:
