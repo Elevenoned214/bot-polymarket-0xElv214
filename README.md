@@ -49,6 +49,13 @@ Real bot nyala → Deteksi paper sudah entry → Cek harga saat ini
 
 > **Penting:** Jalankan `bot_paper.py` (atau via service) **sebelum** menjalankan real bot. Jalankan paper dulu minimal beberapa hari untuk ngebaca **pola** (winrate per jam, streak kalah, range yang lagi jalan) dan **momentum waktu** (jam-jam volatile vs kalem) — dari situ lo bisa tentuin kapan real bot sebaiknya nyala, pilih range mana, dan seberapa agresif base amount / martingale. Tanpa paper bot aktif, real bot juga tidak akan pernah entry karena sinyal entry real diambil dari paper.
 
+> **⚠️ Paper ≠ Real 100%:** Paper bot **tidak beneran eksekusi order** di Polymarket — dia cuma catat "seandainya entry di harga X, hasilnya gimana". Di real, order beneran masuk ke orderbook Polymarket, jadi bisa kejadian:
+> - Paper entry di 55¢, tapi real **gagal** karena orderbook udah tipis / harga udah jalan / slippage
+> - Paper entry, tapi real telat ke-trigger (pakai Fill-or-Kill, kalau ga full filled langsung batal)
+> - Paper win, tapi real kalah karena harga fill beda tipis
+>
+> Jadi winrate paper ≠ winrate real. Paper itu indikator arah & pola, bukan jaminan hasil. Jangan size bet cuma berdasarkan PnL paper aja — tetap konservatif.
+
 ---
 
 ## Komponen Bot
