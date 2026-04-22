@@ -30,7 +30,7 @@ Bot real **tidak entry sendiri** — ia mengikuti sinyal dari bot paper. Bot pap
 ### Kondisi Entry Real Bot
 
 - **Syarat utama:** Paper bot sudah entry di slot market yang sama
-- **Range harga:** Dipilih saat `/start` — `53-58¢` atau `42-47¢`
+- **Range harga:** Dipilih saat `/start` — `≤58¢` atau `≤47¢`
 - **Mode taruhan:** Dipilih saat `/start` — Martingale Recovery atau Flat
 - **Order type:** Market order
 
@@ -45,7 +45,7 @@ Real bot nyala → Deteksi paper sudah entry → Cek harga saat ini
 → Kalau streak kalah > batas → Bot berhenti otomatis
 ```
 
-> **Penting:** Jalankan `bot_paper.py` (atau via service) **sebelum** menjalankan real bot. Tanpa paper bot aktif, real bot tidak akan pernah entry.
+> **Penting:** Jalankan `bot_paper.py` (atau via service) **sebelum** menjalankan real bot. Jalankan paper dulu minimal beberapa hari untuk ngebaca **pola** (winrate per jam, streak kalah, range yang lagi jalan) dan **momentum waktu** (jam-jam volatile vs kalem) — dari situ lo bisa tentuin kapan real bot sebaiknya nyala, pilih range mana, dan seberapa agresif base amount / martingale. Tanpa paper bot aktif, real bot juga tidak akan pernah entry karena sinyal entry real diambil dari paper.
 
 ---
 
@@ -69,7 +69,7 @@ Real bot nyala → Deteksi paper sudah entry → Cek harga saat ini
 - **Auto-redeem** — otomatis klaim hasil setelah market selesai
 - **Martingale Recovery** — taruhan naik otomatis untuk recover kerugian, dengan threshold aktivasi
 - **Flat Mode** — taruhan tetap BASE_AMOUNT setiap entry, tanpa martingale
-- **Price Range Selection** — pilih range entry 53-58¢ atau 42-47¢ saat `/start`
+- **Price Range Selection** — pilih range entry `≤58¢` atau `≤47¢` saat `/start`
 - **Martingale Start** — delay sebelum martingale aktif (misal: aktif baru di losestreak ke-4)
 - **Auto-stop** — bot berhenti sendiri kalau losestreak mencapai batas
 - **Dashboard Web** — pantau winrate, mode, dan status bot secara real-time
@@ -95,7 +95,7 @@ Real bot nyala → Deteksi paper sudah entry → Cek harga saat ini
 ```
 /start
 → "Masukkan base amount ($):"          → contoh: 3
-→ "Pilih price range:" [53-58¢][42-47¢]
+→ "Pilih price range:" [≤58¢][≤47¢]
 → "Pilih mode:" [Martingale Recovery][Flat]
 → (kalau Martingale) "Aktif setelah streak ke berapa?" → contoh: 4
 → "Masukkan max losestreak:"           → contoh: 6
